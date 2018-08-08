@@ -1030,7 +1030,7 @@ EOD;
 				$liveSiteReq['FloatingTips'] = $mediaFolder . '/tips';
 			}
 
-			if ($fbConfig->get('advanced_behavior', '0') == '1')
+			if ($fbConfig->get('advanced_behavior', '0') !== '0')
 			{
 				$chosenOptions = $fbConfig->get('advanced_behavior_options', '{}');
 				$chosenOptions = empty($chosenOptions) ? new stdClass : ArrayHelper::fromObject(json_decode($chosenOptions));
@@ -1045,7 +1045,7 @@ EOD;
 				JHtml::_('script', 'media/com_fabrik/js/lib/art.js');
 			}
 
-			if ($fbConfig->get('advanced_behavior', '0') == '1')
+			if ($fbConfig->get('advanced_behavior', '0') !== '0')
 			{
 				$liveSiteSrc[] = "var chosenInterval = window.setInterval(function () {
 						if (Fabrik.buildChosen) {
@@ -1276,7 +1276,7 @@ EOD;
 	 * are not loaded from cache
 	 *
 	 * @return boolean
-	 * @throws Exception
+	 * @throws \Exception
 	 */
 	protected static function getBurstJs()
 	{
@@ -1728,6 +1728,28 @@ EOD;
 	}
 
 	/**
+	 * Add jLayouts to session - will then be added via Fabrik System plugin
+	 *
+	 * @return  void
+	 */
+	public static function addToSessionCacheIds($id)
+	{
+		$key     = 'fabrik.js.cacheids';
+		$session = JFactory::getSession();
+
+		if ($session->has($key))
+		{
+			$cacheIds = $session->get($key);
+		}
+		else
+		{
+			$cacheIds = array();
+		}
+
+		$cacheIds[] = $id;
+		$session->set($key, array_values(array_unique($cacheIds)));
+	}
+	/**
 	 * Load the slimbox / media box css and js files
 	 *
 	 * @return  void
@@ -2168,14 +2190,14 @@ EOD;
 
         $retStr = <<<EOT
   <!-- Load Facebook SDK for JavaScript -->
-  <div id="fb-root"></div>
-  <script id="fb-like-script">(function(d, s, id) {
-    var js, fjs = d.getElementById('fb-like-script');
-    if (d.getElementById(id)) return;
-    js = d.createElement(s); js.id = id;
-    js.src = "//connect.facebook.net/$locale/sdk.js#xfbml=1&version=v2.11";
-    fjs.parentNode.insertBefore(js, fjs);
-  }(document, 'script', 'facebook-jssdk'));</script>
+<div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) return;
+  js = d.createElement(s); js.id = id;
+  js.src = 'https://connect.facebook.net/$locale/sdk.js#xfbml=1&version=v3.0&appId=$appId&autoLogAppEvents=1';
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
 EOT;
 
 		return $retStr;
@@ -3144,5 +3166,40 @@ EOT;
         }
 
         return $spans[$viewport][$size];
+	}
+
+	/**
+     * Load markup into DOMDocument, checking for entities.
+     *
+     * The loadXML() chokes if data has & in it.  But we can't htmlspecialchar() it, as that removes
+	 * the HTML markup we're looking for.  So we need to ONLY change &'s which aren't already part of
+	 * any HTML entities which may be in the data.  So use a negative lookahead regex, which finds & followed
+	 * by anything except non-space the ;.
+	 *
+	 * It also chokes if the data already contains any HTML entities which XML doesn't like, like &eacute;,
+	 * so first we need to do an html_entity_decode() to get rid of those!
+     *
+     * @param  string  $html  HTML to load
+     *
+     * @return  \DOMDocument
+     */
+	public static function loadDOMDocument($html)
+    {
+        // libxml_use_internal_errors won't supress the empty string warning, so ...
+        if (empty($html))
+        {
+            $html = '<span></span>';
+        }
+
+        // suppress output of warnings about DOM structure
+		$previous = libxml_use_internal_errors(true);
+        $doc = new \DOMDocument;
+        $html = html_entity_decode($html);
+        $html = preg_replace('/&(?!\S+;)/', '&amp;', $html);
+        $doc->loadXML($html);
+		libxml_clear_errors();
+		libxml_use_internal_errors($previous);
+
+		return $doc;
 	}
 }
